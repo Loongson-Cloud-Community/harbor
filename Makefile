@@ -75,23 +75,23 @@ CHECKENVCMD=checkenv.sh
 
 # parameters
 # default is true
-BUILD_PG96=true
+BUILD_PG96=false
 REGISTRYSERVER=
 REGISTRYPROJECTNAME=goharbor
 DEVFLAG=true
-NOTARYFLAG=false
-TRIVYFLAG=false
+NOTARYFLAG=true
+TRIVYFLAG=true
 HTTPPROXY=
 BUILDBIN=false
 NPM_REGISTRY=https://registry.npmjs.org
 # enable/disable chart repo supporting
-CHARTFLAG=false
+CHARTFLAG=true
 BUILDTARGET=build
 GEN_TLS=
 
 # version prepare
 # for docker image tag
-VERSIONTAG=dev
+VERSIONTAG=v2.3.4
 # for base docker image tag
 BUILD_BASE=true
 PUSHBASEIMAGE=false
@@ -107,14 +107,15 @@ PKGVERSIONTAG=dev
 PREPARE_VERSION_NAME=versions
 
 #versions
-REGISTRYVERSION=v2.7.1-patch-2819-2553-redis
-NOTARYVERSION=v0.6.1
+REGISTRYVERSION=v2.7.1
+NOTARYVERSION=v0.7.0
+
+CHARTMUSEUM_SRC_TAG=v0.13.1
 NOTARYMIGRATEVERSION=v4.11.0
-TRIVYVERSION=v0.17.2
-TRIVYADAPTERVERSION=v0.19.0
+TRIVYVERSION=v0.16.0
+TRIVYADAPTERVERSION=v0.18.0
 
 # version of chartmuseum for pulling the source code
-CHARTMUSEUM_SRC_TAG=v0.13.1
 
 # version of chartmuseum
 CHARTMUSEUMVERSION=$(CHARTMUSEUM_SRC_TAG)-redis
@@ -123,11 +124,11 @@ CHARTMUSEUMVERSION=$(CHARTMUSEUM_SRC_TAG)-redis
 REGISTRY_SRC_TAG=v2.7.1
 
 # dependency binaries
-CHARTURL=https://storage.googleapis.com/harbor-builds/bin/chartmuseum/release-${CHARTMUSEUMVERSION}/chartm
-NOTARYURL=https://storage.googleapis.com/harbor-builds/bin/notary/release-${NOTARYVERSION}/binary-bundle.tgz
-REGISTRYURL=https://storage.googleapis.com/harbor-builds/bin/registry/release-${REGISTRYVERSION}/registry
-TRIVY_DOWNLOAD_URL=https://github.com/aquasecurity/trivy/releases/download/$(TRIVYVERSION)/trivy_$(TRIVYVERSION:v%=%)_Linux-64bit.tar.gz
-TRIVY_ADAPTER_DOWNLOAD_URL=https://github.com/aquasecurity/harbor-scanner-trivy/releases/download/$(TRIVYADAPTERVERSION)/harbor-scanner-trivy_$(TRIVYADAPTERVERSION:v%=%)_Linux_x86_64.tar.gz
+CHARTURL=https://github.com/Loongson-Cloud-Community/chartmuseum/releases/download/v0.13.1/chartm
+NOTARYURL=https://github.com/Loongson-Cloud-Community/notary/releases/download/v0.7.0/binary-bundle.tar.gz
+REGISTRYURL=https://github.com/Loongson-Cloud-Community/distribution/releases/download/v2.7.1/registry
+TRIVY_DOWNLOAD_URL=https://github.com/Loongson-Cloud-Community/trivy/releases/download/v0.16.0/trivy_0.16.0_linux-loongarch64.tar.gz
+TRIVY_ADAPTER_DOWNLOAD_URL=https://github.com/Loongson-Cloud-Community/harbor-scanner-trivy/releases/download/v0.18.0/harbor-scanner-trivy_0.18.0_Linux_loongarch64.tar.gz
 
 define VERSIONS_FOR_PREPARE
 VERSION_TAG: $(VERSIONTAG)
@@ -156,7 +157,7 @@ GOINSTALL=$(GOCMD) install
 GOTEST=$(GOCMD) test
 GODEP=$(GOTEST) -i
 GOFMT=gofmt -w
-GOBUILDIMAGE=golang:1.15.12
+GOBUILDIMAGE=cr.loongnix.cn/library/golang:1.15
 GOBUILDPATHINCONTAINER=/harbor
 
 # go build
@@ -173,6 +174,7 @@ endif
 
 # go build command
 GOIMAGEBUILDCMD=/usr/local/go/bin/go build -mod vendor
+
 GOIMAGEBUILD_COMMON=$(GOIMAGEBUILDCMD) $(GOFLAGS) ${GOTAGS} ${GOLDFLAGS}
 GOIMAGEBUILD_CORE=$(GOIMAGEBUILDCMD) $(GOFLAGS) ${GOTAGS} --ldflags "-w -s $(CORE_LDFLAGS)"
 
@@ -261,6 +263,7 @@ PUSHSCRIPTNAME=pushimage.sh
 REGISTRYUSER=
 REGISTRYPASSWORD=
 
+
 # cmds
 DOCKERSAVE_PARA=$(DOCKER_IMAGE_NAME_PREPARE):$(VERSIONTAG) \
 		$(DOCKERIMAGENAME_PORTAL):$(VERSIONTAG) \
@@ -321,10 +324,11 @@ SPECTRAL=$(RUNCONTAINER) $(SPECTRAL_IMAGENAME):$(SPECTRAL_VERSION)
 
 lint_apis:
 	$(call prepare_docker_image,${SPECTRAL_IMAGENAME},${SPECTRAL_VERSION},${SPECTRAL_IMAGE_BUILD_CMD})
-	$(SPECTRAL) lint ./api/v2.0/swagger.yaml
+#	$(SPECTRAL) lint ./api/v2.0/swagger.yaml
 
 SWAGGER_IMAGENAME=goharbor/swagger
 SWAGGER_VERSION=v0.25.0
+
 SWAGGER=$(RUNCONTAINER) ${SWAGGER_IMAGENAME}:${SWAGGER_VERSION}
 SWAGGER_GENERATE_SERVER=${SWAGGER} generate server --template-dir=$(TOOLSPATH)/swagger/templates --exclude-main --additional-initialism=CVE --additional-initialism=GC --additional-initialism=OIDC
 SWAGGER_IMAGE_BUILD_CMD=${DOCKERBUILD} -f ${TOOLSPATH}/swagger/Dockerfile --build-arg GOLANG=${GOBUILDIMAGE} --build-arg SWAGGER_VERSION=${SWAGGER_VERSION} -t ${SWAGGER_IMAGENAME}:$(SWAGGER_VERSION) .
@@ -345,9 +349,10 @@ gen_apis: lint_apis
 
 
 MOCKERY_IMAGENAME=goharbor/mockery
-MOCKERY_VERSION=v2.1.0
+MOCKERY_VERSION=v2.7.4
 MOCKERY=$(RUNCONTAINER) ${MOCKERY_IMAGENAME}:${MOCKERY_VERSION}
 MOCKERY_IMAGE_BUILD_CMD=${DOCKERBUILD} -f ${TOOLSPATH}/mockery/Dockerfile --build-arg GOLANG=${GOBUILDIMAGE} --build-arg MOCKERY_VERSION=${MOCKERY_VERSION} -t ${MOCKERY_IMAGENAME}:$(MOCKERY_VERSION) .
+
 
 gen_mocks:
 	$(call prepare_docker_image,${MOCKERY_IMAGENAME},${MOCKERY_VERSION},${MOCKERY_IMAGE_BUILD_CMD})
@@ -431,6 +436,9 @@ build:
 	 -e TRIVYVERSION=$(TRIVYVERSION) -e TRIVYADAPTERVERSION=$(TRIVYADAPTERVERSION) \
 	 -e VERSIONTAG=$(VERSIONTAG) \
 	 -e BUILDBIN=$(BUILDBIN) \
+	 -e NOTARYFLAG=$(NOTARYFLAG) \
+	 -e TRIVYFLAG=$(TRIVYFLAG) \
+	 -e CHARTFLAG=$(CHARTFLAG) \
 	 -e CHARTMUSEUMVERSION=$(CHARTMUSEUMVERSION) -e CHARTMUSEUM_SRC_TAG=$(CHARTMUSEUM_SRC_TAG) -e DOCKERIMAGENAME_CHART_SERVER=$(DOCKERIMAGENAME_CHART_SERVER) \
 	 -e NPM_REGISTRY=$(NPM_REGISTRY) -e BASEIMAGETAG=$(BASEIMAGETAG) -e BASEIMAGENAMESPACE=$(BASEIMAGENAMESPACE) \
 	 -e CHARTURL=$(CHARTURL) -e NOTARYURL=$(NOTARYURL) -e REGISTRYURL=$(REGISTRYURL) \
@@ -508,6 +516,7 @@ package_offline: update_prepare_version compile build
 gosec:
 	#go get github.com/securego/gosec/cmd/gosec
 	#go get github.com/dghubble/sling
+	@which go gosec || go get github.com/securego/gosec/cmd/gosec
 	@echo "run secure go scan ..."
 	@if [ "$(GOSECRESULTS)" != "" ] ; then \
 		$(GOPATH)/bin/gosec -fmt=json -out=$(GOSECRESULTS) -quiet ./... | true ; \
@@ -537,6 +546,7 @@ commentfmt:
 	fi
 
 misspell:
+	@which misspell || go get github.com/client9/misspell/cmd/misspell
 	@echo checking misspell...
 	@find . -type d \( -path ./src/vendor -o -path ./tests \) -prune -o -name '*.go' -print | xargs misspell -error
 

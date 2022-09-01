@@ -1,7 +1,9 @@
-FROM photon:4.0
+FROM cr.loongnix.cn/loongson/loongnix-server:8.3
 
-RUN tdnf install -y nginx shadow >> /dev/null \
-    && tdnf clean all \
-    && groupadd -r -g 10000 nginx && useradd --no-log-init -r -g 10000 -u 10000 nginx \
+RUN dnf install -y nginx shadow-utils >> /dev/null \
+    && dnf clean all \
+	&& find / -user nginx | xargs chown 10000:10000 \
+	&& userdel nginx \
+    && groupadd -r -g 1001 nginx && useradd --no-log-init -r -g 1001 -u 1001 nginx \
     && ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log
