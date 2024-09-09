@@ -1,6 +1,6 @@
-FROM photon:5.0
+FROM lcr.loongnix.cn/openanolis/anolisos:23.1
 
-RUN tdnf install -y rpm shadow >> /dev/null \
-    && tdnf clean all \
+RUN dnf install -y rpm  >> /dev/null \
+    && dnf clean all \
     && groupadd -r -g 10000 scanner \
     && useradd --no-log-init -m -r -g 10000 -u 10000 scanner

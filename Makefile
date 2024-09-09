@@ -1,3 +1,5 @@
+#docker build  --build-arg https_proxy=http://10.130.0.20:7890 --build-arg harbor_base_image_version=v2.11.1-rc1  --build-arg harbor_base_namespace=lcr.loongnix.cn/goharbor -f /virt/yzw/harbor/make/photon/log/Dockerfile -t lcr.loongnix.cn/goharbor/harbor-log:v2.11.1-rc1 .
+#docker build -f make/photon/db/Dockerfile.base -t lcr.loongnix.cn/goharbor/harbor-db-base:v2.11.1-rc1 .
 # Makefile for Harbor project
 #
 # Targets:
@@ -74,10 +76,10 @@ PORTAL_PATH=$(BUILDPATH)/src/portal
 CHECKENVCMD=checkenv.sh
 
 # parameters
-REGISTRYSERVER=
+REGISTRYSERVER=lcr.loongnix.cn
 REGISTRYPROJECTNAME=goharbor
 DEVFLAG=true
-TRIVYFLAG=false
+TRIVYFLAG=true
 HTTPPROXY=
 BUILDBIN=true
 NPM_REGISTRY=https://registry.npmjs.org
@@ -86,24 +88,24 @@ GEN_TLS=
 
 # version prepare
 # for docker image tag
-VERSIONTAG=dev
+VERSIONTAG=v2.11.1-rc1
 # for base docker image tag
 BUILD_BASE=true
 PUSHBASEIMAGE=false
-BASEIMAGETAG=dev
+BASEIMAGETAG=v2.11.1-rc1
 BUILDBASETARGET=trivy-adapter core db jobservice log nginx portal prepare redis registry registryctl exporter
-IMAGENAMESPACE=goharbor
-BASEIMAGENAMESPACE=goharbor
+IMAGENAMESPACE=lcr.loongnix.cn/goharbor
+BASEIMAGENAMESPACE=lcr.loongnix.cn/goharbor
 # #input true/false only
 PULL_BASE_FROM_DOCKERHUB=true
 
 # for harbor package name
-PKGVERSIONTAG=dev
+PKGVERSIONTAG=v2.11.1-rc1
 
 PREPARE_VERSION_NAME=versions
 
 #versions
-REGISTRYVERSION=v2.8.3-patch-redis
+REGISTRYVERSION=v2.8.0
 TRIVYVERSION=v0.51.2
 TRIVYADAPTERVERSION=v0.31.2
 
@@ -111,9 +113,14 @@ TRIVYADAPTERVERSION=v0.31.2
 REGISTRY_SRC_TAG=v2.8.3
 
 # dependency binaries
-REGISTRYURL=https://storage.googleapis.com/harbor-builds/bin/registry/release-${REGISTRYVERSION}/registry
-TRIVY_DOWNLOAD_URL=https://github.com/aquasecurity/trivy/releases/download/$(TRIVYVERSION)/trivy_$(TRIVYVERSION:v%=%)_Linux-64bit.tar.gz
-TRIVY_ADAPTER_DOWNLOAD_URL=https://github.com/aquasecurity/harbor-scanner-trivy/releases/download/$(TRIVYADAPTERVERSION)/harbor-scanner-trivy_$(TRIVYADAPTERVERSION:v%=%)_Linux_x86_64.tar.gz
+REGISTRYURL=/virt/download/registry
+#REGISTRYURL=http://10.130.0.75:7050/loongarch64/distribution/distribution/2.8.0/registry
+TRIVY_DOWNLOAD_URL=http://10.130.0.75:7050/loongarch64/aquasecurity/trivy/v0.51.2/trivy_0.51.2_Linux-64bit.tar.gz
+TRIVY_ADAPTER_DOWNLOAD_URL=http://10.130.0.75:7050/loongarch64/aquasecurity/harbor-scanner-trivy/v0.31.2/harbor-scanner-trivy_0.31.2_Linux_loong64.tar.gz
+
+#REGISTRYURL=https://storage.googleapis.com/harbor-builds/bin/registry/release-${REGISTRYVERSION}/registry
+#TRIVY_DOWNLOAD_URL=https://github.com/aquasecurity/trivy/releases/download/$(TRIVYVERSION)/trivy_$(TRIVYVERSION:v%=%)_Linux-64bit.tar.gz
+#TRIVY_ADAPTER_DOWNLOAD_URL=https://github.com/aquasecurity/harbor-scanner-trivy/releases/download/$(TRIVYADAPTERVERSION)/harbor-scanner-trivy_$(TRIVYADAPTERVERSION:v%=%)_Linux_x86_64.tar.gz
 
 define VERSIONS_FOR_PREPARE
 VERSION_TAG: $(VERSIONTAG)
@@ -131,6 +138,7 @@ DOCKERIMAGES=$(DOCKERCMD) images
 DOCKERSAVE=$(DOCKERCMD) save
 DOCKERCOMPOSECMD=$(shell which docker-compose)
 DOCKERTAG=$(DOCKERCMD) tag
+DOCKERPUSH=$(DOCKERCMD) push
 
 # go parameters
 GOCMD=$(shell which go)
@@ -140,7 +148,7 @@ GOINSTALL=$(GOCMD) install
 GOTEST=$(GOCMD) test
 GODEP=$(GOTEST) -i
 GOFMT=gofmt -w
-GOBUILDIMAGE=golang:1.22.6
+GOBUILDIMAGE=lcr.loongnix.cn/library/golang:1.22
 GOBUILDPATHINCONTAINER=/harbor
 
 # go build
@@ -245,7 +253,8 @@ DOCKERSAVE_PARA=$(DOCKER_IMAGE_NAME_PREPARE):$(VERSIONTAG) \
 		$(DOCKERIMAGENAME_EXPORTER):$(VERSIONTAG) \
 		$(IMAGENAMESPACE)/redis-photon:$(VERSIONTAG) \
 		$(IMAGENAMESPACE)/nginx-photon:$(VERSIONTAG) \
-		$(IMAGENAMESPACE)/registry-photon:$(VERSIONTAG)
+		$(IMAGENAMESPACE)/registry-photon:$(VERSIONTAG) \
+		$(IMAGENAMESPACE)/trivy-adapter-photon:$(VERSIONTAG)
 
 PACKAGE_OFFLINE_PARA=-zcvf harbor-offline-installer-$(PKGVERSIONTAG).tgz \
 					$(HARBORPKG)/$(DOCKERIMGFILE).$(VERSIONTAG).tar.gz \
@@ -268,7 +277,7 @@ ifeq ($(TRIVYFLAG), true)
 endif
 
 
-RUNCONTAINER=$(DOCKERCMD) run --rm -u $(shell id -u):$(shell id -g) -v $(BUILDPATH):$(BUILDPATH) -w $(BUILDPATH)
+RUNCONTAINER=$(DOCKERCMD) run --rm -e GOPROXY=$(GOPROXY) -e https_proxy=$(https_proxy) -u $(shell id -u):$(shell id -g) -v $(BUILDPATH):$(BUILDPATH) -w $(BUILDPATH)
 
 # $1 the name of the docker image
 # $2 the tag of the docker image
@@ -282,7 +291,7 @@ endef
 # lint swagger doc
 SPECTRAL_IMAGENAME=$(IMAGENAMESPACE)/spectral
 SPECTRAL_VERSION=v6.1.0
-SPECTRAL_IMAGE_BUILD_CMD=${DOCKERBUILD} -f ${TOOLSPATH}/spectral/Dockerfile --build-arg GOLANG=${GOBUILDIMAGE} --build-arg SPECTRAL_VERSION=${SPECTRAL_VERSION} -t ${SPECTRAL_IMAGENAME}:$(SPECTRAL_VERSION) .
+SPECTRAL_IMAGE_BUILD_CMD=${DOCKERBUILD} -f ${TOOLSPATH}/spectral/Dockerfile --build-arg GOLANG=${GOBUILDIMAGE} --build-arg SPECTRAL_VERSION=${SPECTRAL_VERSION} --build-arg https_proxy=$(https_proxy) -t ${SPECTRAL_IMAGENAME}:$(SPECTRAL_VERSION) .
 SPECTRAL=$(RUNCONTAINER) $(SPECTRAL_IMAGENAME):$(SPECTRAL_VERSION)
 
 lint_apis:
@@ -290,10 +299,10 @@ lint_apis:
 	$(SPECTRAL) lint ./api/v2.0/swagger.yaml
 
 SWAGGER_IMAGENAME=$(IMAGENAMESPACE)/swagger
-SWAGGER_VERSION=v0.25.0
+SWAGGER_VERSION=v0.26.0
 SWAGGER=$(RUNCONTAINER) ${SWAGGER_IMAGENAME}:${SWAGGER_VERSION}
 SWAGGER_GENERATE_SERVER=${SWAGGER} generate server --template-dir=$(TOOLSPATH)/swagger/templates --exclude-main --additional-initialism=CVE --additional-initialism=GC --additional-initialism=OIDC
-SWAGGER_IMAGE_BUILD_CMD=${DOCKERBUILD} -f ${TOOLSPATH}/swagger/Dockerfile --build-arg GOLANG=${GOBUILDIMAGE} --build-arg SWAGGER_VERSION=${SWAGGER_VERSION} -t ${SWAGGER_IMAGENAME}:$(SWAGGER_VERSION) .
+SWAGGER_IMAGE_BUILD_CMD=${DOCKERBUILD} -f ${TOOLSPATH}/swagger/Dockerfile --build-arg GOLANG=${GOBUILDIMAGE} --build-arg SWAGGER_VERSION=${SWAGGER_VERSION} --build-arg https_proxy=$(https_proxy) -t ${SWAGGER_IMAGENAME}:$(SWAGGER_VERSION) .
 
 # $1 the path of swagger spec
 # $2 the path of base directory for generating the files
@@ -338,25 +347,26 @@ check_environment:
 compile_core: gen_apis
 	@echo "compiling binary for core (golang image)..."
 	@echo $(GOBUILDPATHINCONTAINER)
-	@$(DOCKERCMD) run --rm -v $(BUILDPATH):$(GOBUILDPATHINCONTAINER) -w $(GOBUILDPATH_CORE) $(GOBUILDIMAGE) $(GOIMAGEBUILD_CORE) -o $(GOBUILDPATHINCONTAINER)/$(GOBUILDMAKEPATH_CORE)/$(CORE_BINARYNAME)
+	@$(DOCKERCMD) run --rm -e GOPROXY=$(GOPROXY) -e https_proxy=$(https_proxy) -v $(BUILDPATH):$(GOBUILDPATHINCONTAINER) -w $(GOBUILDPATH_CORE) $(GOBUILDIMAGE) $(GOIMAGEBUILD_CORE) -o $(GOBUILDPATHINCONTAINER)/$(GOBUILDMAKEPATH_CORE)/$(CORE_BINARYNAME)
 	@echo "Done."
 
 compile_jobservice:
 	@echo "compiling binary for jobservice (golang image)..."
-	@$(DOCKERCMD) run --rm -v $(BUILDPATH):$(GOBUILDPATHINCONTAINER) -w $(GOBUILDPATH_JOBSERVICE) $(GOBUILDIMAGE) $(GOIMAGEBUILD_COMMON) -o $(GOBUILDPATHINCONTAINER)/$(GOBUILDMAKEPATH_JOBSERVICE)/$(JOBSERVICEBINARYNAME)
+	@$(DOCKERCMD) run --rm  -e GOPROXY=$(GOPROXY) -e https_proxy=$(https_proxy) -v $(BUILDPATH):$(GOBUILDPATHINCONTAINER) -w $(GOBUILDPATH_JOBSERVICE) $(GOBUILDIMAGE) $(GOIMAGEBUILD_COMMON) -o $(GOBUILDPATHINCONTAINER)/$(GOBUILDMAKEPATH_JOBSERVICE)/$(JOBSERVICEBINARYNAME)
 	@echo "Done."
 
 compile_registryctl:
 	@echo "compiling binary for harbor registry controller (golang image)..."
-	@$(DOCKERCMD) run --rm -v $(BUILDPATH):$(GOBUILDPATHINCONTAINER) -w $(GOBUILDPATH_REGISTRYCTL) $(GOBUILDIMAGE) $(GOIMAGEBUILD_COMMON) -o $(GOBUILDPATHINCONTAINER)/$(GOBUILDMAKEPATH_REGISTRYCTL)/$(REGISTRYCTLBINARYNAME)
+	@$(DOCKERCMD) run --rm  -e GOPROXY=$(GOPROXY) -e https_proxy=$(https_proxy) -v $(BUILDPATH):$(GOBUILDPATHINCONTAINER) -w $(GOBUILDPATH_REGISTRYCTL) $(GOBUILDIMAGE) $(GOIMAGEBUILD_COMMON) -o $(GOBUILDPATHINCONTAINER)/$(GOBUILDMAKEPATH_REGISTRYCTL)/$(REGISTRYCTLBINARYNAME)
 	@echo "Done."
 
 compile_standalone_db_migrator:
 	@echo "compiling binary for standalone db migrator (golang image)..."
-	@$(DOCKERCMD) run --rm -v $(BUILDPATH):$(GOBUILDPATHINCONTAINER) -w $(GOBUILDPATH_STANDALONE_DB_MIGRATOR) $(GOBUILDIMAGE) $(GOIMAGEBUILD_COMMON) -o $(GOBUILDPATHINCONTAINER)/$(GOBUILDMAKEPATH_STANDALONE_DB_MIGRATOR)/$(STANDALONE_DB_MIGRATOR_BINARYNAME)
+	@$(DOCKERCMD) run --rm -e GOPROXY=$(GOPROXY) -e https_proxy=$(https_proxy) -v $(BUILDPATH):$(GOBUILDPATHINCONTAINER) -w $(GOBUILDPATH_STANDALONE_DB_MIGRATOR) $(GOBUILDIMAGE) $(GOIMAGEBUILD_COMMON) -o $(GOBUILDPATHINCONTAINER)/$(GOBUILDMAKEPATH_STANDALONE_DB_MIGRATOR)/$(STANDALONE_DB_MIGRATOR_BINARYNAME)
 	@echo "Done."
 
-compile: check_environment versions_prepare compile_core compile_jobservice compile_registryctl
+#compile: check_environment versions_prepare compile_core compile_jobservice compile_registryctl
+compile: check_environment versions_prepare  compile_jobservice compile_registryctl
 
 update_prepare_version:
 	@echo "substitute the prepare version tag in prepare file..."
@@ -409,8 +419,7 @@ build_base_docker:
 	fi
 	@for name in $(BUILDBASETARGET); do \
 		echo $$name ; \
-		sleep 30 ; \
-		$(DOCKERBUILD) --pull --no-cache -f $(MAKEFILEPATH_PHOTON)/$$name/Dockerfile.base -t $(BASEIMAGENAMESPACE)/harbor-$$name-base:$(BASEIMAGETAG) --label base-build-date=$(date +"%Y%m%d") . ; \
+		$(DOCKERBUILD) --pull   -f $(MAKEFILEPATH_PHOTON)/$$name/Dockerfile.base -t $(BASEIMAGENAMESPACE)/harbor-$$name-base:$(BASEIMAGETAG) --label base-build-date=$(date +"%Y%m%d") . ; \
 		if [ "$(PUSHBASEIMAGE)" != "false" ] ; then \
 			$(PUSHSCRIPTPATH)/$(PUSHSCRIPTNAME) $(BASEIMAGENAMESPACE)/harbor-$$name-base:$(BASEIMAGETAG) $(REGISTRYUSER) $(REGISTRYPASSWORD) || exit 1; \
 		fi ; \
@@ -437,7 +446,7 @@ package_online: update_prepare_version
 	@rm -rf $(HARBORPKG)
 	@echo "Done."
 
-package_offline: update_prepare_version compile build
+package_offline:
 
 	@echo "packing offline package ..."
 	@cp -r make $(HARBORPKG)
@@ -481,6 +490,67 @@ govulncheck:
 	@echo golang vulnerability check
 	@cd ./src/; $(GOVULNCHECK) ./...;
 
+push_base:
+	        @echo "pushing harbor base-images to lcr.loongnix.cn"
+#	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-notary-signer-base:$(VERSIONTAG)
+#	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-notary-server-base:$(VERSIONTAG)
+#	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-trivy-adapter-base:$(VERSIONTAG)
+#	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/spectral:v6.1.0
+#	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/swagger:v0.25.0
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-exporter-base:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/redis-photon-base:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-registryctl-base:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/registry-photon-base:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/prepare-base:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/nginx-photon-base:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-log-base:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-jobservice-base:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-core-base:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-portal-base:$(VERSIONTAG)
+
+push_docker:
+	@echo "pushing harbor images to docker.hub.com"
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/prepare:$(VERSIONTAG) loongarch64/goharbor/prepare:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/harbor-log:$(VERSIONTAG) loongarch64/goharbor/harbor-log:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/harbor-nginx:$(VERSIONTAG) loongarch64/goharbor/harbor-nginx:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/harbor-registry:$(VERSIONTAG) loongarch64/goharbor/harbor-registry:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/harbor-db:$(VERSIONTAG) loongarch64/goharbor/harbor-db:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/harbor-portal:$(VERSIONTAG) loongarch64/goharbor/harbor-portal:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/nginx-photon:$(VERSIONTAG) loongarch64/goharbor/nginx-photon:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/harbor-registryctl:$(VERSIONTAG) loongarch64/goharbor/harbor-registryctl:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/redis-photon:$(VERSIONTAG) loongarch64/goharbor/redis-photon:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/harbor-exporter:$(VERSIONTAG) loongarch64/goharbor/harbor-exporter:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/harbor-core:$(VERSIONTAG) loongarch64/goharbor/harbor-core:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/harbor-jobservice:$(VERSIONTAG) loongarch64/goharbor/harbor-jobservice:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/registry-photon:$(VERSIONTAG) loongarch64/goharbor/registry-photon:$(VERSIONTAG)
+	@$(DOCKERTAG) lcr.loongnix.cn/goharbor/trivy-adapter-photon:$(VERSIONTAG) loongarch64/goharbor/trivy-adapter-photon:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/goharbor/harbor-exporter:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/goharbor/redis-photon:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/goharbor/harbor-registryctl:$(VERSIONTAG)
+	@$(DOCKERPUSH)  loongarch64/registry-photon:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/prepare:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/nginx-photon:$(VERSIONTAG)
+	@$(DOCKERPUSH)  loongarch64/harbor-log:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/harbor-jobservice:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/harbor-core:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/harbor-portal:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/harbor-db:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/harbor-nginx:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/harbor-registry:$(VERSIONTAG)
+	@$(DOCKERPUSH) loongarch64/trivy-adapter-photon:$(VERSIONTAG)
+
+push:
+	@echo "pushing harbor images to lcr.loongnix.cn"
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-exporter:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/redis-photon:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-registryctl:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/registry-photon:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/prepare:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/nginx-photon:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-log:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-jobservice:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-core:$(VERSIONTAG)
+	@$(DOCKERPUSH) lcr.loongnix.cn/goharbor/harbor-portal:$(VERSIONTAG)
 
 pushimage:
 	@echo "pushing harbor images ..."

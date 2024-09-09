@@ -1,7 +1,8 @@
-FROM photon:5.0
+#FROM lcr.loongnix.cn/openanolis/anolisos:23.1\
+FROM lcr.loongnix.cn/openeuler/openeuler:24.03-LTS-y
 
-RUN tdnf install -y cronie rsyslog logrotate shadow tar gzip sudo >> /dev/null\
+RUN dnf install -y cronie rsyslog logrotate tar gzip sudo >> /dev/null\
     && mkdir /var/spool/rsyslog \
     && groupadd -r -g 10000 syslog && useradd --no-log-init -r -g 10000 -u 10000 syslog \
-    && tdnf clean all \
+    && dnf clean all \
     && chage -M 99999 root

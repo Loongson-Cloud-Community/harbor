@@ -8,6 +8,5 @@ STOPSIGNAL SIGQUIT
 
 HEALTHCHECK CMD curl --fail -s http://localhost:8080 || exit 1
 
-USER nginx
-
+#USER nginx
 CMD ["nginx", "-g", "daemon off;"]

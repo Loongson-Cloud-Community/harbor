@@ -1,5 +1,5 @@
-FROM photon:5.0
+FROM lcr.loongnix.cn/openanolis/anolisos:23.1
 
-RUN tdnf install -y tzdata shadow >> /dev/null \
-    && tdnf clean all \
-    && groupadd -r -g 10000 harbor && useradd --no-log-init -r -m -g 10000 -u 10000 harbor
+#RUN dnf update && install -y tzdata >> /dev/null \
+#    && dnf clean all \
+RUN    groupadd -r -g 10000 harbor && useradd --no-log-init -r -m -g 10000 -u 10000 harbor
